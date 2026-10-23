@@ -84,7 +84,14 @@ Known unknowns:
   (~145 MB) is probably enough. The owner already has openai-whisper `.pt` and
   whisper.cpp ggml models, but faster-whisper can't read those.
 
+## To-do (owner asked, Oct 2026)
+
+- Let each user choose how to wake their bot: `jarvis voice setup` asks for the wake
+  phrase (Enter = "hey <bot name>"), plus an optional keyboard shortcut that opens the
+  Grok Bot voice chat without the microphone.
+- Menu bar app instead of a Terminal window; launch at login. Needed before other
+  users can use this.
+
 ## Ideas for next versions
 
 - Multi-display screenshots; accessibility-tree reading of the frontmost app.
-- Menu bar app instead of a Terminal window; launch at login.
