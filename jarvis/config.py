@@ -1,0 +1,69 @@
+"""Settings stored in ~/.jarvis (outside the repo, so your secret key never gets committed)."""
+
+from __future__ import annotations
+
+import json
+import os
+import secrets
+from datetime import datetime
+from pathlib import Path
+
+from .permissions import DEFAULT_MODE
+
+HOME = Path(os.environ.get("JARVIS_HOME", Path.home() / ".jarvis"))
+CONFIG_FILE = HOME / "config.json"
+PAUSE_FILE = HOME / "PAUSED"
+LOG_FILE = HOME / "activity.log"
+URL_FILE = HOME / "connector-url.txt"
+
+DEFAULTS = {
+    "mode": DEFAULT_MODE,
+    "port": 8765,
+    "voice": "Daniel",           # British male voice, closest to the films' Jarvis
+    "screenshot_width": 1280,
+    "tunnel": "cloudflare",      # cloudflare | ngrok | none
+    "ngrok_domain": "",          # e.g. "my-jarvis.ngrok-free.app" for a URL that never changes
+}
+
+
+def new_key() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def load() -> dict:
+    HOME.mkdir(parents=True, exist_ok=True)
+    data = {}
+    if CONFIG_FILE.exists():
+        data = json.loads(CONFIG_FILE.read_text())
+    merged = {**DEFAULTS, **data}
+    if not merged.get("key"):
+        merged["key"] = new_key()
+        save(merged)
+    return merged
+
+
+def save(cfg: dict) -> None:
+    HOME.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2) + "\n")
+    CONFIG_FILE.chmod(0o600)
+
+
+def update(**changes) -> dict:
+    cfg = load()
+    cfg.update(changes)
+    save(cfg)
+    return cfg
+
+
+def current_mode() -> str:
+    return load()["mode"]
+
+
+def is_paused() -> bool:
+    return PAUSE_FILE.exists()
+
+
+def log(message: str) -> None:
+    HOME.mkdir(parents=True, exist_ok=True)
+    with LOG_FILE.open("a") as f:
+        f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {message}\n")
