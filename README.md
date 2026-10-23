@@ -10,7 +10,7 @@ keyboard, opening apps). Every action passes through permission layers that you
 control.
 
 ```
- You  ──talk/type──►  Grok (grok.com, Grok app, Grok Bot)
+ You  ──talk/type──►  Grok Bot (your bots, e.g. Elon)
                          │   decides what to do
                          ▼
               secure tunnel (Cloudflare)
@@ -22,8 +22,8 @@ control.
           screenshots · mouse · keyboard · apps · websites · voice
 ```
 
-Technically, Jarvis is an **MCP server**, which Grok calls a "custom connector". Grok
-supports these officially at grok.com/connectors.
+Technically, Jarvis is an **MCP server**, which Grok Bot calls a "custom connector". Grok Bot
+adds these for you when you send it the link.
 
 ---
 
@@ -50,30 +50,31 @@ this folder on your Mac.
 ## Every day: start Jarvis
 
 Double-click **`Start Jarvis.command`** in this folder (or type `jarvis start` in
-Terminal). After a few seconds it prints something like:
+Terminal). After a few seconds it prints a message like this:
 
 ```
-  Jarvis is online. Your Grok connector URL is:
-
-  https://some-words-here.trycloudflare.com/Abc123SecretKey/mcp
+Please add (or update) a custom MCP connector called "Jarvis":
+  URL:    https://some-words-here.trycloudflare.com/mcp
+  Header: Authorization: Bearer Abc123SecretKey
+It lets you see and control my Mac. Once added, call its get_status tool to check it works.
 ```
 
 Leave that window open. Jarvis runs as long as it stays open.
 
-## Connect Grok (first time, and whenever the link changes)
+## Connect Grok Bot (first time, and whenever the link changes)
 
-1. Go to **grok.com/connectors**, then **New Connector → Custom**.
-2. Name it `Jarvis` and paste the URL from above. If it asks about
-   authentication, choose **None**. The secret key is already inside the URL.
-3. In a Grok chat (or Grok Bot), make sure the Jarvis connector is turned on and
-   try: *"Use Jarvis to take a screenshot and tell me what's on my screen."*
-4. Then: *"Open Safari and go to youtube.com."*
+1. Copy that whole message and send it to your bot in Grok Bot (for example Elon).
+   The bot adds the connector for you, after you confirm.
+2. Test it: *"Use Jarvis to take a screenshot and tell me what's on my screen."*
+3. Then: *"Open Safari and go to youtube.com."*
 
-> ⚠️ **The URL is like a key to your Mac.** Don't share it or post screenshots of
-> it. If it ever leaks, run `jarvis new-key`, restart Jarvis, and update Grok.
+Run `jarvis url` to see the message again.
 
-The free Cloudflare link changes each time Jarvis restarts, so you'd have to paste a
-new one into Grok each time. To get a link that never changes, see
+> ⚠️ **The key works like a key to your Mac.** Only give it to your own Grok Bot. If it
+> ever leaks, run `jarvis new-key`, restart Jarvis, and send your bot the new message.
+
+The free Cloudflare link changes each time Jarvis restarts, so you'd have to send the
+message again after each restart. To get a link that never changes, see
 [A link that never changes](#a-link-that-never-changes) below.
 
 ---
@@ -112,16 +113,42 @@ jarvis mode ask        # switch to "ask"
 
 ---
 
-## Voice
+## Voice: "Hey Jarvis"
 
-- **You → Grok:** use voice mode in the Grok app (Mac or iPhone) with the Jarvis
-  connector on. Whether voice mode can use connectors is up to xAI. If yours can't,
-  type instead.
-- **Jarvis → you:** Grok can make your Mac speak out loud with a British voice
-  (`speak`). To change the voice, edit `"voice"` in `~/.jarvis/config.json`. Run
-  `say -v '?'` in Terminal to list the voices.
+Say your wake phrase anywhere near your Mac, then what you want:
 
-A "Hey Jarvis" wake word on the Mac is a possible next step.
+> "Hey Jarvis, open Claude and start a new chat."
+
+or say "Hey Jarvis", wait for the *tink* sound, then speak. A *pop* sound means your
+request was sent to Grok Bot. Grok Bot does the work and answers out loud through
+your Mac's speakers.
+
+How it works: your Mac turns your speech into text **on the Mac itself** (offline;
+nothing is recorded or uploaded until it hears the wake phrase). The text goes to
+Grok Bot through a **routine with a webhook**, Grok Bot does the thinking, and then it
+acts and speaks through Jarvis.
+
+**Set up (once):**
+
+1. Send this to your bot in Grok Bot:
+   > Please create a routine called "Jarvis voice" with a webhook trigger. When it
+   > fires, the JSON body has a `message` field: do what it says, using the Jarvis
+   > connector, and reply out loud with Jarvis's speak tool. Give me the webhook URL and
+   > any secret header it needs.
+2. In Terminal, type `jarvis voice setup` and paste what the bot gave you.
+3. Test without speaking: `jarvis voice test "open Safari"`. Safari should open.
+4. Restart Jarvis. The first start downloads the speech model (~500 MB, one time).
+   macOS will ask to let Terminal use the **microphone**. Click Allow.
+
+**Choose your own wake phrase(s):**
+
+```
+jarvis wake "hey jarvis" "yo friday"     # any phrases you like
+jarvis voice off / jarvis voice on       # turn listening off or on
+```
+
+To change the speaking voice, edit `"voice"` in `~/.jarvis/config.json`. Run
+`say -v '?'` in Terminal to list the voices.
 
 ## What Grok can do through Jarvis
 
@@ -150,14 +177,16 @@ A "Hey Jarvis" wake word on the Mac is a possible next step.
 | Screenshots are black or only show the wallpaper | Screen Recording isn't on for Terminal. Turn it on, quit Terminal, reopen it. |
 | Clicks or typing do nothing | Accessibility isn't on for Terminal. Same fix. |
 | Grok says it can't connect | Is the Jarvis window still open? Did the link change? Run `jarvis url` to see the current one. |
-| Grok won't accept the URL without "OAuth" | Tell Claude. An OAuth sign-in can be added. |
+| Grok Bot says it can't see the screenshot image | Fine. Each screenshot also comes with a private link Grok Bot can open. |
+| "Hey Jarvis" doesn't react | Check Terminal is allowed to use the Microphone (System Settings > Privacy & Security). Run `jarvis voice` to check the setup. |
 | `jarvis: command not found` | Close and reopen Terminal, or run `./install.sh` again. |
 
 ## Status
 
-Version 0.1, built and tested on Linux with a simulated Mac. The connector, the
-permission layers and the security checks pass their tests. The parts that touch the
-real Mac (`jarvis/mac.py`) still need their first real run on macOS. See `CLAUDE.md`.
+Version 0.2, built and tested on Linux with a simulated Mac. The connector, the
+permission layers, the security checks and the voice logic pass their tests. The
+parts that touch the real Mac (`jarvis/mac.py`, the microphone in `jarvis/voice.py`)
+still need their first real run on macOS. See `CLAUDE.md`.
 
 ## Files
 
@@ -165,6 +194,7 @@ real Mac (`jarvis/mac.py`) still need their first real run on macOS. See `CLAUDE
 - `jarvis/permissions.py`: the permission layers
 - `jarvis/server.py`: the connector Grok talks to
 - `jarvis/tunnel.py`: the secure public link
+- `jarvis/voice.py`: the wake phrase listener
 - `jarvis/__main__.py`: the `jarvis` Terminal command
 - Your settings, secret key and activity log live in `~/.jarvis/`, outside this
   folder, so they never get uploaded to GitHub.

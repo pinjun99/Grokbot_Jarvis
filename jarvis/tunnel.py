@@ -82,7 +82,3 @@ class Tunnel:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
 
-
-def connector_url(public_base: str, key: str) -> str:
-    return f"{public_base.rstrip('/')}/{key}/mcp"
-

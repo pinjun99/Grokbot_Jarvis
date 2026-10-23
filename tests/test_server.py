@@ -4,6 +4,8 @@ import anyio
 import httpx
 from mcp.client.client import Client
 
+from jarvis.server import ShotStore
+
 from .conftest import KEY
 
 
@@ -34,6 +36,25 @@ def test_screenshot_returns_image(harness):
     assert kinds == ["image", "text"]
     assert result.content[0].mime_type == "image/jpeg"
     assert "1280x800" in text(result)
+
+
+def test_screenshot_also_available_as_expiring_link(harness):
+    note = text(call(harness, "screenshot"))
+    link = note.split("open it here (valid 10 minutes): ")[1]
+    assert KEY not in link
+    got = httpx.get(link)
+    assert got.status_code == 200 and got.headers["content-type"] == "image/jpeg"
+    assert got.content == b"\xff\xd8fakejpeg"
+    assert httpx.get(f"{harness.base}/shots/made-up.jpg").status_code == 404
+
+
+def test_shot_links_expire():
+    now = [0.0]
+    store = ShotStore(ttl=600, clock=lambda: now[0])
+    shot_id = store.add(b"img").rsplit("/", 1)[1].removesuffix(".jpg")
+    assert store.get(shot_id) == b"img"
+    now[0] = 601
+    assert store.get(shot_id) is None
 
 
 def test_open_app_and_click_run_without_asking_in_assist(harness):

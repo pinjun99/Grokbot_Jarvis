@@ -23,6 +23,12 @@ DEFAULTS = {
     "screenshot_width": 1280,
     "tunnel": "cloudflare",      # cloudflare | ngrok | none
     "ngrok_domain": "",          # e.g. "my-jarvis.ngrok-free.app" for a URL that never changes
+    "voice_enabled": False,
+    "wake_phrases": ["hey jarvis"],
+    "voice_webhook_url": "",     # the Grok Bot routine webhook that receives what you say
+    "voice_webhook_headers": {},
+    "speech_model": "small",     # offline Whisper model: tiny, base, small, medium
+    "speech_language": "",       # e.g. "en"; empty = detect automatically
 }
 
 

@@ -7,7 +7,7 @@ import uvicorn
 
 from jarvis.mac import Screenshot
 from jarvis.permissions import Gatekeeper
-from jarvis.server import build_app, build_server
+from jarvis.server import ShotStore, build_app, build_server
 
 KEY = "test-secret-key"
 
@@ -75,13 +75,15 @@ def _free_port():
 def harness():
     h = Harness()
     port = _free_port()
-    app = build_app(build_server(h.mac, h.gate), KEY)
+    h.shots = ShotStore()
+    app = build_app(build_server(h.mac, h.gate, h.shots), KEY, h.shots)
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     while not server.started:
         time.sleep(0.02)
     h.base = f"http://127.0.0.1:{port}"
+    h.shots.base_url = h.base
     h.url = f"{h.base}/{KEY}/mcp"
     yield h
     server.should_exit = True

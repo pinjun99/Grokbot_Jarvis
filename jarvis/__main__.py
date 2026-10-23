@@ -60,19 +60,30 @@ def cmd_doctor(_args) -> int:
     return 0
 
 
+def connector_message(public: str, key: str) -> str:
+    return (
+        "Please add (or update) a custom MCP connector called \"Jarvis\":\n"
+        f"  URL:    {public.rstrip('/')}/mcp\n"
+        f"  Header: Authorization: Bearer {key}\n"
+        "It lets you see and control my Mac. Once added, call its get_status tool to check it works."
+    )
+
+
 def cmd_start(args) -> int:
     import uvicorn
 
     from .mac import MacController
     from .permissions import Gatekeeper
-    from .server import build_app, build_server
-    from .tunnel import Tunnel, connector_url
+    from .server import ShotStore, build_app, build_server
+    from .tunnel import Tunnel
 
     cfg = config.load()
     mac = MacController(max_width=cfg["screenshot_width"], voice=cfg["voice"])
     gate = Gatekeeper(get_mode=config.current_mode, is_paused=config.is_paused,
                       confirm=mac.confirm, log=config.log)
-    app = build_app(build_server(mac, gate), cfg["key"])
+    shots = ShotStore()
+    shots.base_url = f"http://127.0.0.1:{cfg['port']}"
+    app = build_app(build_server(mac, gate, shots), cfg["key"], shots)
 
     print(BANNER)
     print(f"Permission mode: {gate.mode()} - {MODES[gate.mode()]}")
@@ -81,16 +92,16 @@ def cmd_start(args) -> int:
     tunnel = None
     if cfg["tunnel"] != "none" and not args.local:
         def show(public: str) -> None:
-            url = connector_url(public, cfg["key"])
-            config.URL_FILE.write_text(url + "\n")
+            shots.base_url = public
+            message = connector_message(public, cfg["key"])
+            config.URL_FILE.write_text(message + "\n")
             print("=" * 72)
-            print("  Jarvis is online. Your Grok connector URL is:\n")
-            print(f"  {url}\n")
-            print("  Paste it in Grok: grok.com/connectors > New Connector > Custom.")
-            print("  Keep it secret - anyone with this link can control your Mac.")
+            print("  Jarvis is online. Send this message to your Grok Bot to connect it:\n")
+            print(message)
+            print("\n  Keep the key secret - anyone with it can control your Mac.")
             if cfg["tunnel"] == "cloudflare":
-                print("  (This link changes every time Jarvis restarts. See the README for a")
-                print("   permanent one.)")
+                print("  (The link changes every time Jarvis restarts. See the README for a")
+                print("   permanent one.)  Show this message again any time: jarvis url")
             print("=" * 72)
             print("Press Ctrl+C here to stop Jarvis.\n")
 
@@ -100,6 +111,9 @@ def cmd_start(args) -> int:
     else:
         print(f"Local only: http://127.0.0.1:{cfg['port']}/{cfg['key']}/mcp\n")
 
+    if cfg["voice_enabled"]:
+        _start_voice_thread(cfg)
+
     config.log("Jarvis started")
     try:
         uvicorn.run(app, host="127.0.0.1", port=cfg["port"], log_level="warning")
@@ -107,6 +121,77 @@ def cmd_start(args) -> int:
         if tunnel:
             tunnel.stop()
         config.log("Jarvis stopped")
+    return 0
+
+
+def _start_voice_thread(cfg: dict) -> None:
+    import threading
+
+    from .voice import Listener
+
+    def run() -> None:
+        try:
+            Listener(cfg, config.log, config.is_paused).run(
+                on_ready=lambda: print(f"🎙  Listening for: {', '.join(cfg['wake_phrases'])}\n"))
+        except Exception as e:
+            print(f"Voice stopped: {e}")
+            config.log(f"Voice stopped: {e}")
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def cmd_voice(args) -> int:
+    cfg = config.load()
+    if args.action == "setup":
+        print("Voice setup. First, ask your Grok Bot to create the routine (see README > Voice),")
+        print("then paste the webhook details it gives you.\n")
+        url = input("Webhook URL: ").strip()
+        if not url.startswith("https://"):
+            print("That doesn't look like a webhook URL (it should start with https://).")
+            return 1
+        headers = {}
+        header = input("Secret header, if Grok Bot gave you one (e.g. 'Authorization: Bearer abc'), "
+                       "else press Enter: ").strip()
+        if header:
+            name, _, value = header.partition(":")
+            headers[name.strip()] = value.strip()
+        config.update(voice_webhook_url=url, voice_webhook_headers=headers, voice_enabled=True)
+        print("\nSaved. Test it without the microphone:  jarvis voice test \"open Safari\"")
+        return 0
+    if args.action == "test":
+        from .voice import send_to_grok
+
+        if not cfg["voice_webhook_url"]:
+            print("Run 'jarvis voice setup' first.")
+            return 1
+        text = " ".join(args.text) or "open Safari"
+        status = send_to_grok(cfg["voice_webhook_url"], text, cfg["voice_webhook_headers"])
+        print(f"Sent \"{text}\" to Grok Bot (answer: {status}). Check that your Grok Bot reacted.")
+        return 0
+    if args.action in ("on", "off"):
+        config.update(voice_enabled=args.action == "on")
+        print(f"Voice wake-up is {args.action}. Restart Jarvis for it to take effect.")
+        return 0
+    if args.action == "listen":
+        from .voice import Listener
+
+        Listener(cfg, config.log, config.is_paused).run(
+            on_ready=lambda: print(f"🎙  Listening for: {', '.join(cfg['wake_phrases'])}  (Ctrl+C to stop)"))
+        return 0
+    print(f"Voice wake-up: {'on' if cfg['voice_enabled'] else 'off'}")
+    print(f"Wake phrases: {', '.join(cfg['wake_phrases'])}")
+    print(f"Grok Bot webhook: {'set' if cfg['voice_webhook_url'] else 'not set (run: jarvis voice setup)'}")
+    return 0
+
+
+def cmd_wake(args) -> int:
+    if not args.phrases:
+        print("Wake phrases: " + ", ".join(config.load()["wake_phrases"]))
+        print('Change with: jarvis wake "hey jarvis" "yo friday"')
+        return 0
+    phrases = [p.strip().lower() for p in args.phrases if p.strip()]
+    config.update(wake_phrases=phrases)
+    print(f"Jarvis now wakes up to: {', '.join(phrases)}. Restart Jarvis for it to take effect.")
     return 0
 
 
@@ -197,6 +282,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("log", help="show what Grok has done recently")
     p.add_argument("-n", "--lines", type=int, default=40)
     p.set_defaults(func=cmd_log)
+    p = sub.add_parser("voice", help="voice wake-up: setup, test, on, off, listen")
+    p.add_argument("action", nargs="?", choices=["setup", "test", "on", "off", "listen"])
+    p.add_argument("text", nargs="*")
+    p.set_defaults(func=cmd_voice)
+    p = sub.add_parser("wake", help="show or change the wake phrase(s)")
+    p.add_argument("phrases", nargs="*")
+    p.set_defaults(func=cmd_wake)
     p = sub.add_parser("tunnel", help="choose how Grok reaches this Mac")
     p.add_argument("provider", choices=["cloudflare", "ngrok", "none"])
     p.add_argument("domain", nargs="?")

@@ -9,6 +9,8 @@ from __future__ import annotations
 import functools
 import hmac
 import json
+import secrets
+import threading
 import time
 
 from mcp.server.mcpserver import Image, MCPServer
@@ -45,7 +47,38 @@ _ACT = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=
 _DANGER = ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True)
 
 
-def build_server(mac, gate: Gatekeeper) -> MCPServer:
+class ShotStore:
+    """Keeps recent screenshots briefly so Grok can also open them as a link.
+
+    Each link uses its own random id (not the bridge key) and expires after a few minutes.
+    """
+
+    def __init__(self, ttl: float = 600, keep: int = 20, clock=time.monotonic):
+        self.ttl = ttl
+        self.keep = keep
+        self.clock = clock
+        self.base_url = ""  # public address, set once the tunnel is up
+        self._shots: dict[str, tuple[float, bytes]] = {}
+        self._lock = threading.Lock()
+
+    def add(self, data: bytes) -> str:
+        shot_id = secrets.token_urlsafe(16)
+        with self._lock:
+            self._shots[shot_id] = (self.clock(), data)
+            while len(self._shots) > self.keep:
+                self._shots.pop(next(iter(self._shots)))
+        return f"{self.base_url.rstrip('/')}/shots/{shot_id}.jpg"
+
+    def get(self, shot_id: str) -> bytes | None:
+        with self._lock:
+            entry = self._shots.get(shot_id)
+            if entry and self.clock() - entry[0] <= self.ttl:
+                return entry[1]
+            self._shots.pop(shot_id, None)
+            return None
+
+
+def build_server(mac, gate: Gatekeeper, shots: ShotStore | None = None) -> MCPServer:
     """`mac` is a MacController (or a fake one in tests)."""
     server = MCPServer(name="jarvis", title="Jarvis - Mac control", instructions=INSTRUCTIONS, version="0.1.0")
 
@@ -89,10 +122,10 @@ def build_server(mac, gate: Gatekeeper) -> MCPServer:
         gate.check(Risk.OBSERVE, "Take a screenshot")
         shot = mac.screenshot()
         front = mac.running_apps()["frontmost"]
-        return [
-            Image(data=shot.data, format="jpeg"),
-            f"Screenshot is {shot.width}x{shot.height} pixels. Frontmost app: {front}.",
-        ]
+        note = f"Screenshot is {shot.width}x{shot.height} pixels. Frontmost app: {front}."
+        if shots is not None:
+            note += f" If you can't see the image above, open it here (valid 10 minutes): {shots.add(shot.data)}"
+        return [Image(data=shot.data, format="jpeg"), note]
 
     @tool(_OBSERVE)
     def read_screen_text() -> str:
@@ -233,12 +266,14 @@ def build_server(mac, gate: Gatekeeper) -> MCPServer:
 
 
 class KeyGuard:
-    """Lets requests through only with the secret key, either in the URL path
-    (/<key>/mcp) or as an `Authorization: Bearer <key>` header on /mcp."""
+    """Lets requests through only with the secret key, either as an
+    `Authorization: Bearer <key>` header on /mcp or in the URL path (/<key>/mcp).
+    Also serves screenshot links from the ShotStore."""
 
-    def __init__(self, app: ASGIApp, key: str):
+    def __init__(self, app: ASGIApp, key: str, shots: ShotStore | None = None):
         self.app = app
         self.key = key
+        self.shots = shots
         self.secret_path = f"/{key}/mcp"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -247,6 +282,10 @@ class KeyGuard:
         path = scope["path"].rstrip("/") or "/"
         if path == "/":
             return await self._plain(send, 200, b"Jarvis is online.")
+        if self.shots and path.startswith("/shots/") and path.endswith(".jpg"):
+            data = self.shots.get(path[len("/shots/"):-len(".jpg")])
+            if data is not None:
+                return await self._plain(send, 200, data, b"image/jpeg")
         headers = dict(scope.get("headers") or [])
         bearer = headers.get(b"authorization", b"").decode()
         if hmac.compare_digest(path, self.secret_path) or (
@@ -257,13 +296,13 @@ class KeyGuard:
         return await self._plain(send, 404, b"Not found.")
 
     @staticmethod
-    async def _plain(send: Send, status: int, body: bytes) -> None:
+    async def _plain(send: Send, status: int, body: bytes, content_type: bytes = b"text/plain") -> None:
         await send({"type": "http.response.start", "status": status,
-                    "headers": [(b"content-type", b"text/plain"), (b"content-length", str(len(body)).encode())]})
+                    "headers": [(b"content-type", content_type), (b"content-length", str(len(body)).encode())]})
         await send({"type": "http.response.body", "body": body})
 
 
-def build_app(server: MCPServer, key: str) -> ASGIApp:
+def build_app(server: MCPServer, key: str, shots: ShotStore | None = None) -> ASGIApp:
     app = server.streamable_http_app(
         streamable_http_path=f"/{key}/mcp",
         stateless_http=True,
@@ -272,4 +311,4 @@ def build_app(server: MCPServer, key: str) -> ASGIApp:
         # (checked by KeyGuard) is what protects the server, not the Host header.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    return KeyGuard(app, key)
+    return KeyGuard(app, key, shots)
