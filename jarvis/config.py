@@ -19,7 +19,10 @@ URL_FILE = HOME / "connector-url.txt"
 DEFAULTS = {
     "mode": DEFAULT_MODE,
     "port": 8765,
-    "voice": "Daniel",           # British male voice, closest to the films' Jarvis
+    "voice": "Daniel",           # macOS backup voice (British male, closest to the films' Jarvis)
+    "speech_voice_provider": "auto",  # grok | mac | auto (= grok once an xAI key is saved)
+    "xai_api_key": "",           # only for Grok's voice (text-to-speech); set with: jarvis voice grok-key
+    "grok_voice": "eve",         # eve, ara, leo, rex, sal, or a custom voice id
     "screenshot_width": 1280,
     "tunnel": "cloudflare",      # cloudflare | ngrok | none
     "ngrok_domain": "",          # e.g. "my-jarvis.ngrok-free.app" for a URL that never changes

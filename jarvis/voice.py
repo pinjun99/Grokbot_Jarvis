@@ -17,6 +17,8 @@ import urllib.request
 from collections.abc import Callable, Iterable
 from difflib import SequenceMatcher
 
+from .speech import speak
+
 SAMPLE_RATE = 16000
 FRAME_SECONDS = 0.03
 
@@ -147,7 +149,7 @@ class Listener:
             chime("Tink")
             return True  # just the wake phrase: listen for the request next
         if self.is_paused():
-            subprocess.Popen(["say", "Jarvis is paused."])
+            speak("Jarvis is paused.")
             return False
         chime("Pop")
         self.log(f"VOICE -> Grok Bot: {command}")
@@ -155,7 +157,7 @@ class Listener:
             send_to_grok(self.cfg["voice_webhook_url"], command, self.cfg.get("voice_webhook_headers"))
         except Exception as e:
             self.log(f"VOICE send failed: {e}")
-            subprocess.Popen(["say", "Sorry, I couldn't reach Grok."])
+            speak("Sorry, I couldn't reach Grok.")
         return False
 
     def run(self, on_ready: Callable[[], None] = lambda: None) -> None:

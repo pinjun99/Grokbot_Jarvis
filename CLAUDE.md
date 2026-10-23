@@ -34,6 +34,14 @@ Flow: Grok Bot (xAI cloud) → Cloudflare quick tunnel (or ngrok) → `127.0.0.1
   `{"source","text","message"}` to the Grok Bot routine webhook (`voice_webhook_url`).
   Runs in a thread inside `jarvis start` when `voice_enabled`. Whisper is only the ears;
   Grok Bot stays the only brain.
+- Speaking (`jarvis/speech.py`): everything Jarvis says (the `speak` tool via
+  `MacController.speak`, and voice.py's "paused"/"couldn't reach Grok") goes through
+  `speech.speak()`: one shared queue + background thread, so it never blocks and two
+  sentences never overlap. With `xai_api_key` set (and `speech_voice_provider` grok/auto) it
+  POSTs to xAI TTS `https://api.x.ai/v1/tts` `{"text","voice_id": grok_voice,"language"}`
+  (reply is MP3, played with `afplay`); on any error, or provider `mac`, it uses
+  `say -v <voice>` and logs why. This is **TTS only**: it gives Jarvis Grok's voice, Grok
+  Bot stays the only brain. Never send xAI anything but the words to speak.
 - Tool errors are re-raised as `ToolError` so Grok sees the reason (the SDK hides other
   exceptions' messages).
 
@@ -69,13 +77,20 @@ uv run jarvis --help
    Check click coordinates line up with what the screenshot shows (Retina scaling).
 4. `jarvis start`, then have the owner send the printed message to their Grok Bot, and
    test from there.
-5. Voice: `jarvis voice listen` (owner in Terminal, mic permission). Tune `Segmenter`
+5. Grok's voice: owner gets a key at console.x.ai > API Keys (TTS costs roughly $15 per
+   1M characters), runs `jarvis voice grok-key`, pastes it, then
+   `jarvis voice say "Hello, I am Jarvis"`. `jarvis voice speaker` lists/chooses voices
+   (eve default, ara, leo, rex, sal; `mac` goes back to `say`). Never tested on a real Mac
+   or against the real xAI API yet: check `afplay` plays the MP3 and the voice list parses.
+6. Voice: `jarvis voice listen` (owner in Terminal, mic permission). Tune `Segmenter`
    sensitivity and the `speech_model` if wake-up is unreliable or slow.
 
 Known unknowns:
 - The exact JSON a Grok Bot routine webhook expects. We send `message` (a full
   instruction), `text` and `source`. Adjust `send_to_grok` if the routine needs another
   shape.
+- How long xAI TTS takes before Grok's voice starts (whole MP3 is fetched first). If it
+  feels slow, the WebSocket streaming endpoint (`wss://api.x.ai/v1/tts`) is the next step.
 - Whether a ~1 s Whisper delay plus routine start-up feels fast enough. A
   `speech_model` of `base` is faster, and `small` is more accurate.
 

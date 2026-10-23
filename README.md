@@ -147,8 +147,43 @@ jarvis wake "hey jarvis" "yo friday"     # any phrases you like
 jarvis voice off / jarvis voice on       # turn listening off or on
 ```
 
-To change the speaking voice, edit `"voice"` in `~/.jarvis/config.json`. Run
-`say -v '?'` in Terminal to list the voices.
+### Grok's own voice
+
+Out of the box, Jarvis talks with the Mac's built-in voice ("Daniel"). To make it talk
+with **Grok's own voice** instead, give Jarvis an xAI API key. Grok Bot still does all
+the thinking; xAI only turns Jarvis's words into Grok's voice.
+
+**Get a key (once, ~3 minutes):**
+
+1. In Safari, go to **console.x.ai** and sign in with the same account you use for Grok.
+2. Click **API Keys** in the left menu, then **Create API Key**. Give it any name
+   (e.g. "Jarvis voice") and click **Create**.
+3. Click the copy button next to the key (it starts with `xai-`). You only see it once.
+4. If the console asks for credits, add a small amount under **Billing** (e.g. $5).
+   Grok's voice costs roughly **$15 per 1 million characters** spoken, so a few dollars
+   last a very long time. (Check console.x.ai for the current price.)
+
+**Turn it on:**
+
+1. In Terminal, type `jarvis voice grok-key` and press Enter.
+2. Paste the key (press cmd+V). Nothing appears on screen while you paste; that's normal.
+   Press Enter.
+3. Test it: `jarvis voice say "Hello, I am Jarvis"`. You should hear Grok's voice.
+4. If Jarvis is running, close its window and run `jarvis start` again.
+
+The key is saved only on your Mac, in `~/.jarvis/config.json`.
+
+**Choose which Grok voice:**
+
+```
+jarvis voice speaker          # list the voices (eve, ara, leo, rex, sal, ...)
+jarvis voice speaker rex      # pick one
+jarvis voice speaker mac      # go back to the Mac's built-in voice
+```
+
+If Grok's voice ever can't be reached (no internet, key problem), Jarvis says it in the
+Mac voice instead, and `jarvis log` shows why. To change that backup Mac voice, edit
+`"voice"` in `~/.jarvis/config.json`. Run `say -v '?'` in Terminal to list the voices.
 
 ## What Grok can do through Jarvis
 
@@ -178,6 +213,7 @@ To change the speaking voice, edit `"voice"` in `~/.jarvis/config.json`. Run
 | Clicks or typing do nothing | Accessibility isn't on for Terminal. Same fix. |
 | Grok says it can't connect | Is the Jarvis window still open? Did the link change? Run `jarvis url` to see the current one. |
 | Grok Bot says it can't see the screenshot image | Fine. Each screenshot also comes with a private link Grok Bot can open. |
+| Jarvis talks in the Mac voice, not Grok's | Run `jarvis voice say "test"`: it tells you why (no key, key rejected, no internet). Re-enter the key with `jarvis voice grok-key`. |
 | "Hey Jarvis" doesn't react | Check Terminal is allowed to use the Microphone (System Settings > Privacy & Security). Run `jarvis voice` to check the setup. |
 | `jarvis: command not found` | Close and reopen Terminal, or run `./install.sh` again. |
 
@@ -195,6 +231,7 @@ still need their first real run on macOS. See `CLAUDE.md`.
 - `jarvis/server.py`: the connector Grok talks to
 - `jarvis/tunnel.py`: the secure public link
 - `jarvis/voice.py`: the wake phrase listener
+- `jarvis/speech.py`: Jarvis's speaking voice (Grok's voice via xAI, Mac `say` as backup)
 - `jarvis/__main__.py`: the `jarvis` Terminal command
 - Your settings, secret key and activity log live in `~/.jarvis/`, outside this
   folder, so they never get uploaded to GitHub.
