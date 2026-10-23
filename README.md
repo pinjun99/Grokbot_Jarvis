@@ -113,10 +113,10 @@ jarvis mode ask        # switch to "ask"
 
 ---
 
-## Voice: "Hey Jarvis"
+## Voice: "Hey" + your bot's name
 
-Say your wake phrase anywhere near your Mac. Jarvis opens a **live voice chat in the
-Grok Bot app** (you'll hear a *pop*), and from then on you're talking to Grok itself:
+Say "Hey" and your bot's name (e.g. **"Hey Elon"**) anywhere near your Mac. Jarvis
+opens a **live voice chat with that bot in the Grok Bot app** (you'll hear a *pop*), and from then on you're talking to Grok itself:
 it hears you, answers in its own voice, and uses Jarvis to see and control the Mac.
 Hang up in Grok Bot when you're done. While a voice chat is open, Jarvis stops
 listening for the wake phrase.
@@ -126,7 +126,8 @@ recorded or uploaded).
 
 **Set up (once):**
 
-1. In Terminal, type `jarvis voice setup` and type the bot to talk to (e.g. `Elon`).
+1. In Terminal, type `jarvis voice setup`. It finds your main bot in Grok Bot (press
+   Enter to accept it) or you type another bot's name.
 2. Test without speaking: `jarvis voice test`. Grok Bot should open a voice chat.
    Hang up again.
 3. Restart Jarvis. The first start downloads the speech model (~500 MB, one time).
@@ -135,7 +136,8 @@ recorded or uploaded).
 **Choose your own wake phrase(s):**
 
 ```
-jarvis wake "hey jarvis" "yo friday"     # any phrases you like
+jarvis wake "hey elon" "yo friday"       # any phrases you like
+jarvis wake default                      # back to "hey" + your bot's name
 jarvis voice off / jarvis voice on       # turn listening off or on
 ```
 
@@ -174,7 +176,7 @@ replies through Jarvis's `speak` tool. To change that speaking voice, edit `"voi
 | Clicks or typing do nothing | Accessibility isn't on for Terminal. Same fix. |
 | Grok says it can't connect | Is the Jarvis window still open? Did the link change? Run `jarvis url` to see the current one. |
 | Grok Bot says it can't see the screenshot image | Fine. Each screenshot also comes with a private link Grok Bot can open. |
-| "Hey Jarvis" doesn't react | Check Terminal is allowed to use the Microphone (System Settings > Privacy & Security). Run `jarvis voice` to check the setup. |
+| "Hey <your bot>" doesn't react | Check Terminal is allowed to use the Microphone (System Settings > Privacy & Security). Run `jarvis voice` to check the setup. |
 | `jarvis: command not found` | Close and reopen Terminal, or run `./install.sh` again. |
 
 ## Status

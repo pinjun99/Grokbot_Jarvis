@@ -126,15 +126,15 @@ def _voice_chat_listener(monkeypatch, app, paused=False):
     sounds, said, logs = [], [], []
     monkeypatch.setattr(voice, "chime", sounds.append)
     monkeypatch.setattr(voice.subprocess, "Popen", lambda args: said.append(args[-1]))
-    cfg = {"wake_phrases": ["hey jarvis"], "wake_action": "voice_chat", "grok_bot_name": "Elon"}
+    cfg = {"wake_phrases": [], "wake_action": "voice_chat", "grok_bot_name": "Elon"}
     return Listener(cfg, log=logs.append, is_paused=lambda: paused, grok_app=app), sounds, said, logs
 
 
 def test_wake_phrase_opens_grok_voice_chat(monkeypatch):
     app = FakeGrokApp()
     listener, sounds, said, _ = _voice_chat_listener(monkeypatch, app)
-    assert listener.handle("Hey Jarvis.", awaiting_command=False) is False
-    assert listener.handle("hey jarvis open safari", awaiting_command=False) is False
+    assert listener.handle("Hey Elon.", awaiting_command=False) is False
+    assert listener.handle("hey elon open safari", awaiting_command=False) is False
     assert listener.handle("random chatter", awaiting_command=True) is False
     assert app.calls == ["Elon", "Elon"]
     assert sounds == ["Pop", "Pop"] and said == []
@@ -143,13 +143,13 @@ def test_wake_phrase_opens_grok_voice_chat(monkeypatch):
 def test_voice_chat_already_open_is_quiet(monkeypatch):
     app = FakeGrokApp(running=True)
     listener, sounds, said, _ = _voice_chat_listener(monkeypatch, app)
-    listener.handle("hey jarvis", awaiting_command=False)
+    listener.handle("hey elon", awaiting_command=False)
     assert sounds == [] and said == []
 
 
 def test_voice_chat_failure_is_spoken_and_logged(monkeypatch):
     listener, _, said, logs = _voice_chat_listener(monkeypatch, FakeGrokApp(fail=True))
-    listener.handle("hey jarvis", awaiting_command=False)
+    listener.handle("hey elon", awaiting_command=False)
     assert said == ["Sorry, I couldn't open Grok Bot."]
     assert "no button" in logs[0]
 
@@ -157,7 +157,7 @@ def test_voice_chat_failure_is_spoken_and_logged(monkeypatch):
 def test_voice_chat_not_opened_while_paused(monkeypatch):
     app = FakeGrokApp()
     listener, _, said, _ = _voice_chat_listener(monkeypatch, app, paused=True)
-    listener.handle("hey jarvis", awaiting_command=False)
+    listener.handle("hey elon", awaiting_command=False)
     assert app.calls == [] and said == ["Jarvis is paused."]
 
 
@@ -172,7 +172,26 @@ def test_find_button_matches_bot_names():
     elon = Node("Elon, Main Bot")
     voice_btn = Node("Start voice chat")
     tree = Node("", Node("", Node("Mr Busy, Unread activity"), elon), Node("", voice_btn))
+    elon.label = "Elon, Main Bot, Unread activity"
     find = lambda wanted: find_button(tree, wanted, lambda n: n.children, lambda n: [n.label] if n.label else [])
     assert find("elon") is elon
     assert find("Start voice chat") is voice_btn
     assert find("Ben") is None
+
+
+def test_wake_phrase_follows_bot_name():
+    from jarvis.voice import wake_phrases
+
+    assert wake_phrases({"wake_phrases": [], "grok_bot_name": "Elon"}) == ["hey elon"]
+    assert wake_phrases({"wake_phrases": [], "grok_bot_name": ""}) == ["hey grok"]
+    assert wake_phrases({"wake_phrases": ["yo friday"], "grok_bot_name": "Elon"}) == ["yo friday"]
+    assert match_wake("Hey, Elon, open Safari.", wake_phrases({"grok_bot_name": "Elon"})) == (True, "open Safari")
+
+
+def test_main_bot_name():
+    from jarvis.grokbot import main_bot_name
+
+    assert main_bot_name("Elon, Main Bot") == "Elon"
+    assert main_bot_name("Elon, Main Bot, Unread activity") == "Elon"
+    assert main_bot_name("Mr Busy, Unread activity") is None
+    assert main_bot_name("Ben") is None

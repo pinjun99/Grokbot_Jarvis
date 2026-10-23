@@ -155,8 +155,8 @@ def _start_voice_thread(cfg: dict) -> None:
 
     def run() -> None:
         try:
-            Listener(cfg, config.log, config.is_paused).run(
-                on_ready=lambda: print(f"🎙  Listening for: {', '.join(cfg['wake_phrases'])}\n"))
+            listener = Listener(cfg, config.log, config.is_paused)
+            listener.run(on_ready=lambda: print(f"🎙  Listening for: {', '.join(listener.phrases)}\n"))
         except Exception as e:
             print(f"Voice stopped: {e}")
             config.log(f"Voice stopped: {e}")
@@ -165,13 +165,22 @@ def _start_voice_thread(cfg: dict) -> None:
 
 
 def cmd_voice(args) -> int:
+    from .voice import wake_phrases
+
     cfg = config.load()
     if args.action == "setup":
-        print("Voice setup. When you say your wake phrase, Jarvis opens a live voice chat in")
-        print("Grok Bot, and Grok answers in its own voice.\n")
-        bot = input("Which bot should it talk to? (e.g. Elon, or press Enter for whichever chat is open): ")
-        config.update(wake_action="voice_chat", grok_bot_name=bot.strip(), voice_enabled=True)
-        print("\nSaved. Test it without the microphone:  jarvis voice test")
+        from .grokbot import GrokBotApp
+
+        print("Voice setup. When you say \"Hey\" and your bot's name, a live voice chat opens")
+        print("in Grok Bot, and your bot answers in its own voice.\n")
+        found = GrokBotApp().main_bot()
+        if found:
+            bot = input(f"Which bot should wake up? Press Enter for {found}, or type another name: ").strip() or found
+        else:
+            bot = input("Which bot should wake up? Type its name as shown in Grok Bot (e.g. Elon): ").strip()
+        cfg = config.update(wake_action="voice_chat", grok_bot_name=bot, wake_phrases=[], voice_enabled=True)
+        print(f"\nSaved. Say \"{wake_phrases(cfg)[0].capitalize()}\" to start a voice chat.")
+        print("Test it without the microphone:  jarvis voice test")
         return 0
     if args.action == "webhook":
         print("Webhook setup. First, ask your Grok Bot to create the routine (see README > Voice),")
@@ -217,11 +226,11 @@ def cmd_voice(args) -> int:
     if args.action == "listen":
         from .voice import Listener
 
-        Listener(cfg, config.log, config.is_paused).run(
-            on_ready=lambda: print(f"🎙  Listening for: {', '.join(cfg['wake_phrases'])}  (Ctrl+C to stop)"))
+        listener = Listener(cfg, config.log, config.is_paused)
+        listener.run(on_ready=lambda: print(f"🎙  Listening for: {', '.join(listener.phrases)}  (Ctrl+C to stop)"))
         return 0
     print(f"Voice wake-up: {'on' if cfg['voice_enabled'] else 'off'}")
-    print(f"Wake phrases: {', '.join(cfg['wake_phrases'])}")
+    print(f"Wake phrases: {', '.join(wake_phrases(cfg))}")
     if cfg["wake_action"] == "voice_chat":
         print(f"Wake phrase opens: a Grok Bot voice chat with {cfg['grok_bot_name'] or 'the chat that is open'}")
     else:
@@ -231,12 +240,16 @@ def cmd_voice(args) -> int:
 
 
 def cmd_wake(args) -> int:
+    from .voice import wake_phrases
+
     if not args.phrases:
-        print("Wake phrases: " + ", ".join(config.load()["wake_phrases"]))
-        print('Change with: jarvis wake "hey jarvis" "yo friday"')
+        print("Wake phrases: " + ", ".join(wake_phrases(config.load())))
+        print('Change with: jarvis wake "hey elon" "yo friday"   (or: jarvis wake default)')
         return 0
     phrases = [p.strip().lower() for p in args.phrases if p.strip()]
-    config.update(wake_phrases=phrases)
+    if phrases == ["default"]:
+        phrases = []  # back to "hey <bot name>"
+    phrases = wake_phrases(config.update(wake_phrases=phrases))
     print(f"Jarvis now wakes up to: {', '.join(phrases)}. Restart Jarvis for it to take effect.")
     return 0
 

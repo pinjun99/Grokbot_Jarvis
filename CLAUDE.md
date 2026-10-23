@@ -16,7 +16,7 @@ connectors must be public https URLs (they run on xAI's backend) and support no 
 static headers, or OAuth. It's unsure whether inline MCP images reach the model, so
 `screenshot` also returns a 10-minute link (`ShotStore`, `/shots/<random>.jpg`). Routines
 can be triggered by a webhook. The Grok Bot app also has a live voice chat (Grok speaks
-in its own voice), which is what "Hey Jarvis" opens by default.
+in its own voice), which is what the wake phrase opens by default.
 
 Flow: Grok Bot (xAI cloud) → Cloudflare quick tunnel (or ngrok) → `127.0.0.1:8765` →
 `KeyGuard` (secret key in path `/<key>/mcp`, or `Authorization: Bearer <key>` on `/mcp`)
@@ -31,7 +31,9 @@ Flow: Grok Bot (xAI cloud) → Cloudflare quick tunnel (or ngrok) → `127.0.0.1
 - State lives in `~/.jarvis/` (config.json with the secret key, activity.log, PAUSED flag,
   tunnel.log, bin/cloudflared). Never commit it.
 - Voice (`jarvis/voice.py`): sounddevice mic → loudness `Segmenter` → offline
-  faster-whisper → fuzzy `match_wake` against user-chosen `wake_phrases` → then by
+  faster-whisper → fuzzy `match_wake` against `wake_phrases(cfg)` (user's own phrases,
+  else "hey <grok_bot_name>", e.g. "hey elon"; setup detects the "<name>, Main Bot"
+  button) → then by
   `wake_action`: `voice_chat` (default) opens a live voice chat in the Grok Bot app with
   `grok_bot_name` (`jarvis/grokbot.py`, presses its "Start voice chat" button through the
   accessibility API; Grok Bot is Electron, bundle id `com.anysphere.sand`, so we set
@@ -68,7 +70,9 @@ uv run jarvis --help
   1280x832 shots), type_text with é/emoji, click/double-click on OCR coordinates, drag,
   scroll, cmd+t in Safari, notify, confirm, speak. No bugs found in `mac.py`. Note:
   TextEdit auto-capitalises line starts, so compare text case-insensitively.
-- "Hey Jarvis" → Grok Bot voice chat with Elon works from `jarvis voice listen`.
+- Wake phrase → Grok Bot voice chat with Elon works from `jarvis voice listen`.
+  The owner wants the wake phrase to be "hey <their bot's name>", not "hey jarvis",
+  because the project is meant for every Grok Bot user.
 - Still to do: `jarvis start` and test the connector from Grok Bot (incl. inside a
   voice chat, so Grok can use Jarvis while talking).
 

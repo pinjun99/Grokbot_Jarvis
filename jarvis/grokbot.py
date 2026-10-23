@@ -16,20 +16,28 @@ VOICE_CHAT_BUTTON = "Start voice chat"
 HANG_UP_BUTTON = "Hang up"  # only there while a voice chat is running
 
 
+def main_bot_name(label: str) -> str | None:
+    """ "Elon, Main Bot" or "Elon, Main Bot, Unread activity" -> "Elon"."""
+    name, *details = (part.strip() for part in label.split(","))
+    return name if "main bot" in (d.lower() for d in details) else None
+
+
 def label_matches(label: str, wanted: str) -> bool:
     """Bot buttons are labelled "Elon, Main Bot" or "Mr Busy, Unread activity"."""
     label, wanted = label.strip().lower(), wanted.strip().lower()
     return label == wanted or label.split(",")[0].strip() == wanted
 
 
-def find_button(root, wanted: str, children: Callable[[object], Iterable], labels: Callable[[object], list[str]],
-                max_depth: int = 60):
-    """Breadth-first search for a button whose title or description matches `wanted`."""
+def find_button(root, wanted: str | Callable[[str], bool], children: Callable[[object], Iterable],
+                labels: Callable[[object], list[str]], max_depth: int = 60):
+    """Breadth-first search for a button whose title or description matches `wanted`
+    (a name, or a test on the label)."""
+    test = wanted if callable(wanted) else (lambda lab: label_matches(lab, wanted))
     level = [root]
     for _ in range(max_depth):
         next_level = []
         for el in level:
-            if any(label_matches(lab, wanted) for lab in labels(el)):
+            if any(test(lab) for lab in labels(el)):
                 return el
             next_level.extend(children(el))
         if not next_level:
@@ -89,6 +97,21 @@ class GrokBotApp:
         root = AXUIElementCreateApplication(app.processIdentifier())
         AXUIElementSetAttributeValue(root, "AXManualAccessibility", True)
         return root
+
+    def main_bot(self) -> str | None:
+        """The name of the user's main bot (e.g. "Elon"), if Grok Bot is running."""
+        try:
+            app = self._app(launch=False)
+        except RuntimeError:
+            return None
+        root = self._root(app)
+        deadline = time.monotonic() + 5  # the accessibility tree takes a moment to appear
+        while time.monotonic() < deadline:
+            button = find_button(root, lambda lab: main_bot_name(lab) is not None, self._children, self._labels)
+            if button is not None:
+                return next(filter(None, map(main_bot_name, self._labels(button))))
+            time.sleep(0.3)
+        return None
 
     def in_voice_chat(self) -> bool:
         try:

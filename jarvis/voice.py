@@ -27,6 +27,14 @@ PROMPT_TO_GROK = (
 )
 
 
+def wake_phrases(cfg: dict) -> list[str]:
+    """The user's own phrases, else "hey" + the name of their bot ("hey elon")."""
+    if cfg.get("wake_phrases"):
+        return cfg["wake_phrases"]
+    bot = (cfg.get("grok_bot_name") or "grok").strip().lower()
+    return [f"hey {bot}"]
+
+
 def _normalise(text: str) -> list[str]:
     return re.sub(r"[^\w\s']", " ", text.lower()).split()
 
@@ -34,7 +42,7 @@ def _normalise(text: str) -> list[str]:
 def match_wake(text: str, phrases: Iterable[str], threshold: float = 0.75) -> tuple[bool, str]:
     """Does `text` start with one of the wake phrases? Returns (matched, the rest of what was said).
 
-    Fuzzy, because speech-to-text often hears "hey jarvis" as "hey, jervis" or "a jarvis".
+    Fuzzy, because speech-to-text often hears "hey elon" as "hey, ilan" or "a elon".
     """
     words = _normalise(text)
     for phrase in phrases:
@@ -42,7 +50,7 @@ def match_wake(text: str, phrases: Iterable[str], threshold: float = 0.75) -> tu
         if not target:
             continue
         n = len(target)
-        # allow one stray word before the phrase ("oh hey jarvis", "uh hey jarvis")
+        # allow one stray word before the phrase ("oh hey elon", "uh hey elon")
         for start in (0, 1):
             heard = words[start:start + n]
             if len(heard) == n and SequenceMatcher(None, " ".join(heard), " ".join(target)).ratio() >= threshold:
@@ -121,7 +129,7 @@ class Listener:
         self.cfg = cfg
         self.log = log
         self.is_paused = is_paused
-        self.phrases = cfg["wake_phrases"]
+        self.phrases = wake_phrases(cfg)
         self.voice_chat = cfg.get("wake_action", "voice_chat") == "voice_chat"
         if grok_app is None and self.voice_chat:
             from .grokbot import GrokBotApp
