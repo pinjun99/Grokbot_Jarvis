@@ -167,7 +167,14 @@ def _start_voice_thread(cfg: dict) -> None:
 def cmd_voice(args) -> int:
     cfg = config.load()
     if args.action == "setup":
-        print("Voice setup. First, ask your Grok Bot to create the routine (see README > Voice),")
+        print("Voice setup. When you say your wake phrase, Jarvis opens a live voice chat in")
+        print("Grok Bot, and Grok answers in its own voice.\n")
+        bot = input("Which bot should it talk to? (e.g. Elon, or press Enter for whichever chat is open): ")
+        config.update(wake_action="voice_chat", grok_bot_name=bot.strip(), voice_enabled=True)
+        print("\nSaved. Test it without the microphone:  jarvis voice test")
+        return 0
+    if args.action == "webhook":
+        print("Webhook setup. First, ask your Grok Bot to create the routine (see README > Voice),")
         print("then paste the webhook details it gives you.\n")
         url = input("Webhook URL: ").strip()
         if not url.startswith("https://"):
@@ -179,14 +186,25 @@ def cmd_voice(args) -> int:
         if header:
             name, _, value = header.partition(":")
             headers[name.strip()] = value.strip()
-        config.update(voice_webhook_url=url, voice_webhook_headers=headers, voice_enabled=True)
+        config.update(wake_action="webhook", voice_webhook_url=url, voice_webhook_headers=headers,
+                      voice_enabled=True)
         print("\nSaved. Test it without the microphone:  jarvis voice test \"open Safari\"")
+        return 0
+    if args.action == "test" and cfg["wake_action"] == "voice_chat":
+        from .grokbot import GrokBotApp
+
+        try:
+            started = GrokBotApp().start_voice_chat(cfg["grok_bot_name"])
+        except Exception as e:
+            print(f"Couldn't open the voice chat: {e}")
+            return 1
+        print("Opened a Grok Bot voice chat. Say hello!" if started else "A Grok Bot voice chat is already open.")
         return 0
     if args.action == "test":
         from .voice import send_to_grok
 
         if not cfg["voice_webhook_url"]:
-            print("Run 'jarvis voice setup' first.")
+            print("Run 'jarvis voice webhook' first.")
             return 1
         text = " ".join(args.text) or "open Safari"
         status = send_to_grok(cfg["voice_webhook_url"], text, cfg["voice_webhook_headers"])
@@ -204,7 +222,11 @@ def cmd_voice(args) -> int:
         return 0
     print(f"Voice wake-up: {'on' if cfg['voice_enabled'] else 'off'}")
     print(f"Wake phrases: {', '.join(cfg['wake_phrases'])}")
-    print(f"Grok Bot webhook: {'set' if cfg['voice_webhook_url'] else 'not set (run: jarvis voice setup)'}")
+    if cfg["wake_action"] == "voice_chat":
+        print(f"Wake phrase opens: a Grok Bot voice chat with {cfg['grok_bot_name'] or 'the chat that is open'}")
+    else:
+        print(f"Wake phrase sends to: Grok Bot webhook "
+              f"({'set' if cfg['voice_webhook_url'] else 'not set, run: jarvis voice webhook'})")
     return 0
 
 
@@ -306,8 +328,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("log", help="show what Grok has done recently")
     p.add_argument("-n", "--lines", type=int, default=40)
     p.set_defaults(func=cmd_log)
-    p = sub.add_parser("voice", help="voice wake-up: setup, test, on, off, listen")
-    p.add_argument("action", nargs="?", choices=["setup", "test", "on", "off", "listen"])
+    p = sub.add_parser("voice", help="voice wake-up: setup, test, on, off, listen, webhook")
+    p.add_argument("action", nargs="?", choices=["setup", "test", "on", "off", "listen", "webhook"])
     p.add_argument("text", nargs="*")
     p.set_defaults(func=cmd_voice)
     p = sub.add_parser("wake", help="show or change the wake phrase(s)")

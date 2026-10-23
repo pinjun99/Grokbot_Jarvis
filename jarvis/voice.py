@@ -1,9 +1,10 @@
-"""Voice wake-up: say your wake phrase anywhere near the Mac, then your request.
+"""Voice wake-up: say your wake phrase anywhere near the Mac.
 
 These are only the ears. Speech is turned into text on the Mac itself
-(Whisper, running offline), and the text is handed to your Grok Bot through a
-routine's webhook. Grok Bot does all the thinking, then acts and replies out
-loud through the Jarvis bridge.
+(Whisper, running offline). When it hears the wake phrase it either opens a live
+voice chat in the Grok Bot app (wake_action "voice_chat", the default: Grok then
+listens and answers in its own voice), or hands the request to a Grok Bot routine's
+webhook (wake_action "webhook"). Grok Bot does all the thinking either way.
 """
 
 from __future__ import annotations
@@ -116,11 +117,17 @@ def chime(name: str = "Tink") -> None:
 class Listener:
     """Always-on listening loop. Runs until stopped (Ctrl+C)."""
 
-    def __init__(self, cfg: dict, log: Callable[[str], None], is_paused: Callable[[], bool]):
+    def __init__(self, cfg: dict, log: Callable[[str], None], is_paused: Callable[[], bool], grok_app=None):
         self.cfg = cfg
         self.log = log
         self.is_paused = is_paused
         self.phrases = cfg["wake_phrases"]
+        self.voice_chat = cfg.get("wake_action", "voice_chat") == "voice_chat"
+        if grok_app is None and self.voice_chat:
+            from .grokbot import GrokBotApp
+
+            grok_app = GrokBotApp()
+        self.grok_app = grok_app
         self._model = None
 
     def transcribe(self, audio) -> str:
@@ -134,9 +141,28 @@ class Listener:
         )
         return " ".join(s.text.strip() for s in segments).strip()
 
+    def open_voice_chat(self) -> None:
+        if self.is_paused():
+            subprocess.Popen(["say", "Jarvis is paused."])
+            return
+        try:
+            started = self.grok_app.start_voice_chat(self.cfg.get("grok_bot_name", ""))
+        except Exception as e:
+            self.log(f"VOICE could not open Grok Bot voice chat: {e}")
+            subprocess.Popen(["say", "Sorry, I couldn't open Grok Bot."])
+            return
+        if started:
+            chime("Pop")
+            self.log("VOICE -> opened Grok Bot voice chat")
+
     def handle(self, text: str, awaiting_command: bool) -> bool:
         """Returns True if the next utterance should be treated as the command."""
         matched, rest = match_wake(text, self.phrases)
+        if self.voice_chat:
+            # Grok Bot hears the request itself once the voice chat is open
+            if matched:
+                self.open_voice_chat()
+            return False
         if matched:
             command = rest
         elif awaiting_command:
@@ -162,8 +188,8 @@ class Listener:
         import numpy as np
         import sounddevice as sd
 
-        if not self.cfg.get("voice_webhook_url"):
-            raise RuntimeError("Voice isn't set up yet. Run: jarvis voice setup")
+        if not self.voice_chat and not self.cfg.get("voice_webhook_url"):
+            raise RuntimeError("The voice webhook isn't set up yet. Run: jarvis voice webhook")
         print("Loading the speech model (the first time this downloads it, ~500 MB)...")
         self.transcribe(np.zeros(SAMPLE_RATE, dtype=np.float32))
 
@@ -184,6 +210,8 @@ class Listener:
                 utterance = segmenter.feed(frames.get())
                 if utterance is None:
                     continue
+                if self.voice_chat and self.grok_app.in_voice_chat():
+                    continue  # you're talking to Grok Bot, not to Jarvis
                 text = self.transcribe(np.concatenate(utterance))
                 if not text:
                     continue

@@ -24,6 +24,8 @@ DEFAULTS = {
     "tunnel": "cloudflare",      # cloudflare | ngrok | none
     "ngrok_domain": "",          # e.g. "my-jarvis.ngrok-free.app" for a URL that never changes
     "voice_enabled": False,
+    "wake_action": "voice_chat",  # voice_chat: open Grok Bot's live voice chat | webhook: send to a routine
+    "grok_bot_name": "",         # bot the voice chat opens with, e.g. "Elon"; empty = the chat already open
     "wake_phrases": ["hey jarvis"],
     "voice_webhook_url": "",     # the Grok Bot routine webhook that receives what you say
     "voice_webhook_headers": {},
