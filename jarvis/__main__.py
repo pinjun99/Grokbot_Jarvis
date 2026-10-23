@@ -156,7 +156,7 @@ def _start_voice_thread(cfg: dict) -> None:
     def run() -> None:
         try:
             Listener(cfg, config.log, config.is_paused).run(
-                on_ready=lambda: print(f"🎙  Listening for: {', '.join(cfg['wake_phrases'])}\n"))
+                on_ready=lambda: print(f"🎙  Listening for: {', '.join(config.wake_phrases(cfg))}\n"))
         except Exception as e:
             print(f"Voice stopped: {e}")
             config.log(f"Voice stopped: {e}")
@@ -170,8 +170,9 @@ def cmd_voice(args) -> int:
         print("Voice setup. When you say your wake phrase, Jarvis opens a live voice chat in")
         print("Grok Bot, and Grok answers in its own voice.\n")
         bot = input("Which bot should it talk to? (e.g. Elon, or press Enter for whichever chat is open): ")
-        config.update(wake_action="voice_chat", grok_bot_name=bot.strip(), voice_enabled=True)
-        print("\nSaved. Test it without the microphone:  jarvis voice test")
+        cfg = config.update(wake_action="voice_chat", grok_bot_name=bot.strip(), voice_enabled=True)
+        print(f"\nSaved. Say \"{config.wake_phrases(cfg)[0]}\" to wake it up.")
+        print("Test it without the microphone:  jarvis voice test")
         return 0
     if args.action == "webhook":
         print("Webhook setup. First, ask your Grok Bot to create the routine (see README > Voice),")
@@ -218,26 +219,104 @@ def cmd_voice(args) -> int:
         from .voice import Listener
 
         Listener(cfg, config.log, config.is_paused).run(
-            on_ready=lambda: print(f"🎙  Listening for: {', '.join(cfg['wake_phrases'])}  (Ctrl+C to stop)"))
+            on_ready=lambda: print(f"🎙  Listening for: {', '.join(config.wake_phrases(cfg))}  (Ctrl+C to stop)"))
         return 0
+    if args.action == "grok-key":
+        return _voice_grok_key()
+    if args.action == "speaker":
+        return _voice_speaker(cfg, " ".join(args.text).strip().lower())
+    if args.action == "say":
+        from .speech import Speaker, provider
+
+        text = " ".join(args.text) or "Hello! This is how I sound."
+        reason = Speaker().say_now(text)
+        if reason is None:
+            print(f"Spoke in Grok's voice ({cfg['grok_voice']}).")
+        else:
+            print(f"Spoke in the Mac voice ({cfg['voice']}) because {reason}.")
+        return 0 if reason is None or provider(cfg) == "mac" else 1
     print(f"Voice wake-up: {'on' if cfg['voice_enabled'] else 'off'}")
-    print(f"Wake phrases: {', '.join(cfg['wake_phrases'])}")
+    print(f"Wake phrases: {', '.join(config.wake_phrases(cfg))}")
     if cfg["wake_action"] == "voice_chat":
         print(f"Wake phrase opens: a Grok Bot voice chat with {cfg['grok_bot_name'] or 'the chat that is open'}")
     else:
         print(f"Wake phrase sends to: Grok Bot webhook "
               f"({'set' if cfg['voice_webhook_url'] else 'not set, run: jarvis voice webhook'})")
+    print(f"Speaking voice: {_speaking_voice(cfg)}")
+    return 0
+
+
+def _speaking_voice(cfg: dict) -> str:
+    from .speech import provider
+
+    if provider(cfg) == "grok":
+        return f"Grok ({cfg['grok_voice']})" + ("" if cfg["xai_api_key"] else
+                                                  " - but no xAI key yet (run: jarvis voice grok-key)")
+    return f"Mac ({cfg['voice']}). For Grok's voice run: jarvis voice grok-key"
+
+
+def _voice_grok_key() -> int:
+    import getpass
+
+    print("Paste your xAI API key (from console.x.ai > API Keys). It starts with 'xai-'.")
+    print("Nothing shows on screen while you paste - that's normal. Then press Enter.\n")
+    key = getpass.getpass("xAI API key: ").strip()
+    if not key:
+        print("No key entered, nothing changed.")
+        return 1
+    if not key.startswith("xai-"):
+        print("Warning: xAI keys usually start with 'xai-'. Saving it anyway.")
+    config.update(xai_api_key=key, speech_voice_provider="grok")
+    print("\nSaved (only on this Mac, in ~/.jarvis/config.json). Jarvis now speaks in Grok's voice.")
+    print('Test it:  jarvis voice say "Hello, this is my voice"')
+    print("Restart Jarvis if it's running, so it picks up the change everywhere.")
+    return 0
+
+
+def _voice_speaker(cfg: dict, name: str) -> int:
+    from .speech import BUILT_IN_VOICES, list_voices
+
+    if name == "mac":
+        config.update(speech_voice_provider="mac")
+        print(f"Jarvis now speaks in the Mac voice ({cfg['voice']}).")
+        return 0
+    voices = [{"voice_id": v, "name": v.capitalize()} for v in BUILT_IN_VOICES]
+    if cfg["xai_api_key"]:
+        try:
+            voices = list_voices(cfg["xai_api_key"])
+        except Exception as e:
+            print(f"(Couldn't fetch the voice list from xAI: {e}. Showing the usual ones.)\n")
+    ids = [v["voice_id"] for v in voices]
+    if not name:
+        print("Grok voices (current one marked with ►):\n")
+        for v in voices:
+            print(f"  {'►' if v['voice_id'] == cfg['grok_voice'] else ' '} {v['voice_id']:12} {v.get('name', '')}")
+        print("\nChoose with: jarvis voice speaker <name>   e.g. jarvis voice speaker rex")
+        print("Back to the Mac voice:  jarvis voice speaker mac")
+        return 0
+    if name not in ids:
+        print(f"Note: {name!r} isn't in the list above; using it anyway in case it's a custom voice.")
+    changes = {"grok_voice": name}
+    if cfg["xai_api_key"]:
+        changes["speech_voice_provider"] = "grok"
+    config.update(**changes)
+    print(f"Grok voice set to {name}.", "Test it: jarvis voice say \"Hello\"" if cfg["xai_api_key"]
+          else "Add your xAI key to hear it: jarvis voice grok-key")
     return 0
 
 
 def cmd_wake(args) -> int:
     if not args.phrases:
-        print("Wake phrases: " + ", ".join(config.load()["wake_phrases"]))
-        print('Change with: jarvis wake "hey jarvis" "yo friday"')
+        cfg = config.load()
+        print("Wake phrases: " + ", ".join(config.wake_phrases(cfg)))
+        print('Change with: jarvis wake "hey elon" "yo friday"')
+        print("Go back to \"hey\" + your bot's name: jarvis wake auto")
         return 0
     phrases = [p.strip().lower() for p in args.phrases if p.strip()]
-    config.update(wake_phrases=phrases)
-    print(f"Jarvis now wakes up to: {', '.join(phrases)}. Restart Jarvis for it to take effect.")
+    if phrases == ["auto"]:
+        phrases = []
+    cfg = config.update(wake_phrases=phrases)
+    print(f"Now wakes up to: {', '.join(config.wake_phrases(cfg))}. Restart Jarvis for it to take effect.")
     return 0
 
 
@@ -328,8 +407,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("log", help="show what Grok has done recently")
     p.add_argument("-n", "--lines", type=int, default=40)
     p.set_defaults(func=cmd_log)
-    p = sub.add_parser("voice", help="voice wake-up: setup, test, on, off, listen, webhook")
-    p.add_argument("action", nargs="?", choices=["setup", "test", "on", "off", "listen", "webhook"])
+    p = sub.add_parser("voice", help="voice: setup, test, on, off, listen, webhook, grok-key, speaker, say")
+    p.add_argument("action", nargs="?",
+                   choices=["setup", "test", "on", "off", "listen", "webhook", "grok-key", "speaker", "say"])
     p.add_argument("text", nargs="*")
     p.set_defaults(func=cmd_voice)
     p = sub.add_parser("wake", help="show or change the wake phrase(s)")

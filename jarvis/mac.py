@@ -344,8 +344,11 @@ class MacController:
         return {"exit_code": proc.returncode, "stdout": proc.stdout[-8000:], "stderr": proc.stderr[-4000:]}
 
     def speak(self, text: str) -> None:
-        # Non-blocking so Grok can carry on while Jarvis talks
-        subprocess.Popen(["say", "-v", self.voice, text])
+        # Non-blocking so Grok can carry on while Jarvis talks. Grok's own voice if
+        # an xAI key is set, else (or if that fails) the Mac's `say`.
+        from . import speech
+
+        speech.speak(text)
 
     def notify(self, title: str, message: str) -> None:
         run_osascript(

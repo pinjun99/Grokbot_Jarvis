@@ -18,8 +18,12 @@ import urllib.request
 from collections.abc import Callable, Iterable
 from difflib import SequenceMatcher
 
+from .config import wake_phrases
+from .speech import speak
+
 SAMPLE_RATE = 16000
 FRAME_SECONDS = 0.03
+PAUSED_MESSAGE = "Mac control is paused."
 
 PROMPT_TO_GROK = (
     "The user just said this out loud to their Mac: \"{text}\". Do it using the Jarvis connector. "
@@ -121,7 +125,7 @@ class Listener:
         self.cfg = cfg
         self.log = log
         self.is_paused = is_paused
-        self.phrases = cfg["wake_phrases"]
+        self.phrases = wake_phrases(cfg)
         self.voice_chat = cfg.get("wake_action", "voice_chat") == "voice_chat"
         if grok_app is None and self.voice_chat:
             from .grokbot import GrokBotApp
@@ -143,13 +147,13 @@ class Listener:
 
     def open_voice_chat(self) -> None:
         if self.is_paused():
-            subprocess.Popen(["say", "Jarvis is paused."])
+            speak(PAUSED_MESSAGE)
             return
         try:
             started = self.grok_app.start_voice_chat(self.cfg.get("grok_bot_name", ""))
         except Exception as e:
             self.log(f"VOICE could not open Grok Bot voice chat: {e}")
-            subprocess.Popen(["say", "Sorry, I couldn't open Grok Bot."])
+            speak("Sorry, I couldn't open Grok Bot.")
             return
         if started:
             chime("Pop")
@@ -173,7 +177,7 @@ class Listener:
             chime("Tink")
             return True  # just the wake phrase: listen for the request next
         if self.is_paused():
-            subprocess.Popen(["say", "Jarvis is paused."])
+            speak(PAUSED_MESSAGE)
             return False
         chime("Pop")
         self.log(f"VOICE -> Grok Bot: {command}")
@@ -181,7 +185,7 @@ class Listener:
             send_to_grok(self.cfg["voice_webhook_url"], command, self.cfg.get("voice_webhook_headers"))
         except Exception as e:
             self.log(f"VOICE send failed: {e}")
-            subprocess.Popen(["say", "Sorry, I couldn't reach Grok."])
+            speak("Sorry, I couldn't reach Grok.")
         return False
 
     def run(self, on_ready: Callable[[], None] = lambda: None) -> None:

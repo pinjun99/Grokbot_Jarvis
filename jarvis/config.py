@@ -19,14 +19,17 @@ URL_FILE = HOME / "connector-url.txt"
 DEFAULTS = {
     "mode": DEFAULT_MODE,
     "port": 8765,
-    "voice": "Daniel",           # British male voice, closest to the films' Jarvis
+    "voice": "Daniel",           # macOS backup voice (British male, closest to the films' Jarvis)
+    "speech_voice_provider": "auto",  # grok | mac | auto (= grok once an xAI key is saved)
+    "xai_api_key": "",           # only for Grok's voice (text-to-speech); set with: jarvis voice grok-key
+    "grok_voice": "eve",         # eve, ara, leo, rex, sal, or a custom voice id
     "screenshot_width": 1280,
     "tunnel": "cloudflare",      # cloudflare | ngrok | none
     "ngrok_domain": "",          # e.g. "my-jarvis.ngrok-free.app" for a URL that never changes
     "voice_enabled": False,
     "wake_action": "voice_chat",  # voice_chat: open Grok Bot's live voice chat | webhook: send to a routine
     "grok_bot_name": "",         # bot the voice chat opens with, e.g. "Elon"; empty = the chat already open
-    "wake_phrases": ["hey jarvis"],
+    "wake_phrases": [],          # empty = "hey <grok_bot_name>", e.g. "hey elon"
     "voice_webhook_url": "",     # the Grok Bot routine webhook that receives what you say
     "voice_webhook_headers": {},
     "speech_model": "small",     # offline Whisper model: tiny, base, small, medium
@@ -61,6 +64,18 @@ def update(**changes) -> dict:
     cfg.update(changes)
     save(cfg)
     return cfg
+
+
+LEGACY_WAKE_PHRASES = [["hey jarvis"]]  # old default; now we follow the bot's name instead
+
+
+def wake_phrases(cfg: dict) -> list[str]:
+    """What wakes the Mac up: the user's own phrases, else "hey <their Grok Bot's name>"."""
+    phrases = cfg.get("wake_phrases") or []
+    if phrases and phrases not in LEGACY_WAKE_PHRASES:
+        return phrases
+    name = (cfg.get("grok_bot_name") or "").strip().lower()
+    return [f"hey {name}"] if name else ["hey grok"]
 
 
 def current_mode() -> str:
