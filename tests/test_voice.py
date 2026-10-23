@@ -77,22 +77,24 @@ def test_send_to_grok(webhook):
 def test_listener_wake_then_command(webhook, monkeypatch):
     url, received = webhook
     monkeypatch.setattr(voice, "chime", lambda *a: None)
-    cfg = {"wake_phrases": ["hey jarvis"], "voice_webhook_url": url, "voice_webhook_headers": {}}
+    cfg = {"wake_phrases": [], "grok_bot_name": "Elon", "wake_action": "webhook", "voice_webhook_url": url,
+           "voice_webhook_headers": {}}
     listener = Listener(cfg, log=lambda m: None, is_paused=lambda: False)
 
-    assert listener.handle("Hey Jarvis.", awaiting_command=False) is True   # wait for the request
+    assert listener.handle("Hey Elon.", awaiting_command=False) is True   # wait for the request
     assert listener.handle("open my email", awaiting_command=True) is False
     assert listener.handle("random chatter", awaiting_command=False) is False
-    assert listener.handle("hey jarvis open notes", awaiting_command=False) is False
+    assert listener.handle("hey elon open notes", awaiting_command=False) is False
     assert [body["text"] for _, body in received] == ["open my email", "open notes"]
 
 
 def test_wake_phrase_repeated_while_awaiting(webhook, monkeypatch):
     url, received = webhook
     monkeypatch.setattr(voice, "chime", lambda *a: None)
-    cfg = {"wake_phrases": ["hey jarvis"], "voice_webhook_url": url, "voice_webhook_headers": {}}
+    cfg = {"wake_phrases": [], "grok_bot_name": "Elon", "wake_action": "webhook", "voice_webhook_url": url,
+           "voice_webhook_headers": {}}
     listener = Listener(cfg, log=lambda m: None, is_paused=lambda: False)
-    assert listener.handle("hey jarvis open safari", awaiting_command=True) is False
+    assert listener.handle("hey elon open safari", awaiting_command=True) is False
     assert [body["text"] for _, body in received] == ["open safari"]
 
 
@@ -104,3 +106,112 @@ def test_segmenter_with_numpy_frames():
     loud = [np.full(480, 0.2, dtype=np.float32)] * 40
     results = [seg.feed(f) for f in quiet + loud + quiet]
     assert sum(r is not None for r in results) == 1
+
+
+class FakeGrokApp:
+    def __init__(self, running=False, fail=False):
+        self.calls, self.running, self.fail = [], running, fail
+
+    def start_voice_chat(self, bot=""):
+        self.calls.append(bot)
+        if self.fail:
+            raise RuntimeError("no button")
+        return not self.running
+
+    def in_voice_chat(self):
+        return self.running
+
+
+def _voice_chat_listener(monkeypatch, app, paused=False):
+    sounds, said, logs = [], [], []
+    monkeypatch.setattr(voice, "chime", sounds.append)
+    monkeypatch.setattr(voice, "speak", said.append)
+    cfg = {"wake_phrases": [], "wake_action": "voice_chat", "grok_bot_name": "Elon"}
+    return Listener(cfg, log=logs.append, is_paused=lambda: paused, grok_app=app), sounds, said, logs
+
+
+def test_wake_phrase_opens_grok_voice_chat(monkeypatch):
+    app = FakeGrokApp()
+    listener, sounds, said, _ = _voice_chat_listener(monkeypatch, app)
+    assert listener.handle("Hey Elon.", awaiting_command=False) is False
+    assert listener.handle("hey elon open safari", awaiting_command=False) is False
+    assert listener.handle("random chatter", awaiting_command=True) is False
+    assert app.calls == ["Elon", "Elon"]
+    assert sounds == ["Pop", "Pop"] and said == []
+
+
+def test_voice_chat_already_open_is_quiet(monkeypatch):
+    app = FakeGrokApp(running=True)
+    listener, sounds, said, _ = _voice_chat_listener(monkeypatch, app)
+    listener.handle("hey elon", awaiting_command=False)
+    assert sounds == [] and said == []
+
+
+def test_voice_chat_failure_is_spoken_and_logged(monkeypatch):
+    listener, _, said, logs = _voice_chat_listener(monkeypatch, FakeGrokApp(fail=True))
+    listener.handle("hey elon", awaiting_command=False)
+    assert said == ["Sorry, I couldn't open Grok Bot."]
+    assert "no button" in logs[0]
+
+
+def test_voice_chat_not_opened_while_paused(monkeypatch):
+    app = FakeGrokApp()
+    listener, _, said, _ = _voice_chat_listener(monkeypatch, app, paused=True)
+    listener.handle("hey elon", awaiting_command=False)
+    assert app.calls == [] and said == [voice.PAUSED_MESSAGE]
+
+
+class Node:
+    def __init__(self, label="", *children):
+        self.label, self.children = label, list(children)
+
+
+def test_find_button_matches_bot_names():
+    from jarvis.grokbot import find_button
+
+    elon = Node("Elon, Main Bot")
+    voice_btn = Node("Start voice chat")
+    tree = Node("", Node("", Node("Mr Busy, Unread activity"), elon), Node("", voice_btn))
+    find = lambda wanted: find_button(tree, wanted, lambda n: n.children, lambda n: [n.label] if n.label else [])
+    assert find("elon") is elon
+    assert find("Start voice chat") is voice_btn
+    assert find("Ben") is None
+
+
+@pytest.mark.parametrize("cfg,expected", [
+    ({"wake_phrases": [], "grok_bot_name": "Elon"}, ["hey elon"]),
+    ({"wake_phrases": ["hey jarvis"], "grok_bot_name": "Elon"}, ["hey elon"]),   # old default
+    ({"wake_phrases": ["yo friday"], "grok_bot_name": "Elon"}, ["yo friday"]),  # user's own choice
+    ({"wake_phrases": [], "grok_bot_name": ""}, ["hey grok"]),
+])
+def test_wake_phrase_follows_bot_name(cfg, expected):
+    from jarvis.config import wake_phrases
+
+    assert wake_phrases(cfg) == expected
+
+
+def test_hey_bot_name_opens_that_bots_voice_chat(monkeypatch):
+    app = FakeGrokApp()
+    monkeypatch.setattr(voice, "chime", lambda *a: None)
+    cfg = {"wake_phrases": [], "wake_action": "voice_chat", "grok_bot_name": "Elon"}
+    listener = Listener(cfg, log=lambda m: None, is_paused=lambda: False, grok_app=app)
+    listener.handle("Hey Jarvis.", awaiting_command=False)
+    assert app.calls == []
+    listener.handle("Hey, Elon.", awaiting_command=False)
+    assert app.calls == ["Elon"]
+
+
+def test_setup_and_wake_cli(tmp_path, monkeypatch, capsys):
+    from jarvis import __main__ as cli
+    from jarvis import config
+
+    monkeypatch.setattr(config, "HOME", tmp_path)
+    monkeypatch.setattr(config, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(config, "LOG_FILE", tmp_path / "activity.log")
+    monkeypatch.setattr("builtins.input", lambda prompt: "Elon")
+    assert cli.main(["voice", "setup"]) == 0
+    assert 'Say "hey elon"' in capsys.readouterr().out
+    assert cli.main(["wake", "yo friday"]) == 0
+    assert config.wake_phrases(config.load()) == ["yo friday"]
+    assert cli.main(["wake", "auto"]) == 0
+    assert config.wake_phrases(config.load()) == ["hey elon"]

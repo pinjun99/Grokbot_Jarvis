@@ -219,11 +219,11 @@ def test_listener_speaks_through_speech(monkeypatch):
     said = []
     monkeypatch.setattr(voice, "speak", said.append)
     monkeypatch.setattr(voice, "chime", lambda *a: None)
-    cfg = {"wake_phrases": ["hey jarvis"], "voice_webhook_url": "http://127.0.0.1:1/nope",
+    cfg = {"wake_phrases": [], "grok_bot_name": "Elon", "wake_action": "webhook", "voice_webhook_url": "http://127.0.0.1:1/nope",
            "voice_webhook_headers": {}}
     paused = [True]
     listener = voice.Listener(cfg, log=lambda m: None, is_paused=lambda: paused[0])
-    listener.handle("hey jarvis open safari", awaiting_command=False)
+    listener.handle("hey elon open safari", awaiting_command=False)
     paused[0] = False
-    listener.handle("hey jarvis open safari", awaiting_command=False)
-    assert said == ["Jarvis is paused.", "Sorry, I couldn't reach Grok."]
+    listener.handle("hey elon open safari", awaiting_command=False)
+    assert said == [voice.PAUSED_MESSAGE, "Sorry, I couldn't reach Grok."]

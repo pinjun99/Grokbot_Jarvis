@@ -113,43 +113,46 @@ jarvis mode ask        # switch to "ask"
 
 ---
 
-## Voice: "Hey Jarvis"
+## Voice: "Hey" + your bot's name
 
-Say your wake phrase anywhere near your Mac, then what you want:
+Say "hey" and your Grok Bot's name anywhere near your Mac. For a bot called Elon,
+that's **"Hey Elon"**. Jarvis opens a **live voice chat in the
+Grok Bot app** (you'll hear a *pop*), and from then on you're talking to Grok itself:
+it hears you, answers in its own voice, and uses Jarvis to see and control the Mac.
+Hang up in Grok Bot when you're done. While a voice chat is open, Jarvis stops
+listening for the wake phrase.
 
-> "Hey Jarvis, open Claude and start a new chat."
-
-or say "Hey Jarvis", wait for the *tink* sound, then speak. A *pop* sound means your
-request was sent to Grok Bot. Grok Bot does the work and answers out loud through
-your Mac's speakers.
-
-How it works: your Mac turns your speech into text **on the Mac itself** (offline;
-nothing is recorded or uploaded until it hears the wake phrase). The text goes to
-Grok Bot through a **routine with a webhook**, Grok Bot does the thinking, and then it
-acts and speaks through Jarvis.
+Your Mac listens for the wake phrase **on the Mac itself** (offline; nothing is
+recorded or uploaded).
 
 **Set up (once):**
 
-1. Send this to your bot in Grok Bot:
-   > Please create a routine called "Jarvis voice" with a webhook trigger. When it
-   > fires, the JSON body has a `message` field: do what it says, using the Jarvis
-   > connector, and reply out loud with Jarvis's speak tool. Give me the webhook URL and
-   > any secret header it needs.
-2. In Terminal, type `jarvis voice setup` and paste what the bot gave you.
-3. Test without speaking: `jarvis voice test "open Safari"`. Safari should open.
-4. Restart Jarvis. The first start downloads the speech model (~500 MB, one time).
+1. In Terminal, type `jarvis voice setup` and type the bot to talk to (e.g. `Elon`).
+2. Test without speaking: `jarvis voice test`. Grok Bot should open a voice chat.
+   Hang up again.
+3. Restart Jarvis. The first start downloads the speech model (~500 MB, one time).
    macOS will ask to let Terminal use the **microphone**. Click Allow.
 
-**Choose your own wake phrase(s):**
+The wake phrase is "hey" + the bot name you typed in step 1, so every user wakes their
+own bot. To use something else instead:
 
 ```
-jarvis wake "hey jarvis" "yo friday"     # any phrases you like
+jarvis wake "hey elon" "yo friday"       # any phrases you like
+jarvis wake auto                         # back to "hey" + your bot's name
 jarvis voice off / jarvis voice on       # turn listening off or on
 ```
 
+**Without opening a voice chat (advanced):** `jarvis voice webhook` sends what you say
+after the wake phrase to a Grok Bot routine instead. Ask your bot to create a routine
+called "Jarvis voice" with a webhook trigger that does what the JSON `message` field
+says using the Jarvis connector, and paste its webhook URL and secret header. Grok then
+replies through Jarvis's `speak` tool.
+
 ### Grok's own voice
 
-Out of the box, Jarvis talks with the Mac's built-in voice ("Daniel"). To make it talk
+Inside a Grok Bot voice chat, Grok already talks in its own voice. When Grok uses
+Jarvis's `speak` tool (and for Jarvis's own short messages), Jarvis uses the Mac's
+built-in voice ("Daniel") out of the box. To make it talk
 with **Grok's own voice** instead, give Jarvis an xAI API key. Grok Bot still does all
 the thinking; xAI only turns Jarvis's words into Grok's voice.
 
@@ -168,7 +171,7 @@ the thinking; xAI only turns Jarvis's words into Grok's voice.
 1. In Terminal, type `jarvis voice grok-key` and press Enter.
 2. Paste the key (press cmd+V). Nothing appears on screen while you paste; that's normal.
    Press Enter.
-3. Test it: `jarvis voice say "Hello, I am Jarvis"`. You should hear Grok's voice.
+3. Test it: `jarvis voice say "Hello, this is my voice"`. You should hear Grok's voice.
 4. If Jarvis is running, close its window and run `jarvis start` again.
 
 The key is saved only on your Mac, in `~/.jarvis/config.json`.
@@ -214,7 +217,7 @@ Mac voice instead, and `jarvis log` shows why. To change that backup Mac voice, 
 | Grok says it can't connect | Is the Jarvis window still open? Did the link change? Run `jarvis url` to see the current one. |
 | Grok Bot says it can't see the screenshot image | Fine. Each screenshot also comes with a private link Grok Bot can open. |
 | Jarvis talks in the Mac voice, not Grok's | Run `jarvis voice say "test"`: it tells you why (no key, key rejected, no internet). Re-enter the key with `jarvis voice grok-key`. |
-| "Hey Jarvis" doesn't react | Check Terminal is allowed to use the Microphone (System Settings > Privacy & Security). Run `jarvis voice` to check the setup. |
+| "Hey Elon" (your bot's name) doesn't react | Check Terminal is allowed to use the Microphone (System Settings > Privacy & Security). Run `jarvis voice` to check the setup. |
 | `jarvis: command not found` | Close and reopen Terminal, or run `./install.sh` again. |
 
 ## Status
