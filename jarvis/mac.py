@@ -73,6 +73,24 @@ def parse_keys(combo: str) -> tuple[list[str], str]:
     return mods, key
 
 
+def utf16_len(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
+def utf16_chunks(text: str, limit: int = 20) -> list[str]:
+    """Split text into pieces of at most `limit` UTF-16 units (the most one key event can carry),
+    never cutting an emoji or other character in half."""
+    chunks, current = [], ""
+    for ch in text:
+        if current and utf16_len(current + ch) > limit:
+            chunks.append(current)
+            current = ""
+        current += ch
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 @dataclass
 class Screenshot:
     data: bytes
@@ -275,13 +293,11 @@ class MacController:
         for line_no, line in enumerate(text.split("\n")):
             if line_no:
                 self.press_keys("return")
-            # Quartz accepts at most ~20 UTF-16 units per event
-            for i in range(0, len(line), 16):
-                chunk = line[i:i + 16]
+            for chunk in utf16_chunks(line):
                 for down in (True, False):
                     ev = Quartz.CGEventCreateKeyboardEvent(None, 0, down)
                     Quartz.CGEventSetFlags(ev, 0)
-                    Quartz.CGEventKeyboardSetUnicodeString(ev, len(chunk.encode("utf-16-le")) // 2, chunk)
+                    Quartz.CGEventKeyboardSetUnicodeString(ev, utf16_len(chunk), chunk)
                     Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
                 time.sleep(0.01)
 

@@ -20,7 +20,7 @@ fi
 uv --version
 
 say_step "2/4  Installing Jarvis"
-uv tool install --force --editable "$REPO"
+uv tool install --force --python 3.12 --editable "$REPO"
 uv tool update-shell >/dev/null 2>&1 || true
 export PATH="$HOME/.local/bin:$PATH"
 

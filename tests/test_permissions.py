@@ -76,3 +76,12 @@ def test_url_risk():
 def test_screenshot_scale():
     assert screenshot_scale(1512, 1280) == pytest.approx(1280 / 1512)
     assert screenshot_scale(1024, 1280) == 1.0
+
+
+def test_utf16_chunks_never_split_emoji():
+    from jarvis.mac import utf16_chunks, utf16_len
+
+    text = "héllo 👋" * 10 + "😀" * 15
+    chunks = utf16_chunks(text)
+    assert "".join(chunks) == text
+    assert all(utf16_len(c) <= 20 for c in chunks)

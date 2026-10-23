@@ -80,7 +80,8 @@ class ShotStore:
 
 def build_server(mac, gate: Gatekeeper, shots: ShotStore | None = None) -> MCPServer:
     """`mac` is a MacController (or a fake one in tests)."""
-    server = MCPServer(name="jarvis", title="Jarvis - Mac control", instructions=INSTRUCTIONS, version="0.1.0")
+    server = MCPServer(name="jarvis", title="Jarvis - Mac control", instructions=INSTRUCTIONS, version="0.2.0",
+                       log_level="WARNING")
 
     def tool(annotations: ToolAnnotations):
         register = server.tool(annotations=annotations, structured_output=False)

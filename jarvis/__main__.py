@@ -69,6 +69,17 @@ def connector_message(public: str, key: str) -> str:
     )
 
 
+def _port_free(port: int) -> bool:
+    import socket
+
+    with socket.socket() as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
 def cmd_start(args) -> int:
     import uvicorn
 
@@ -78,6 +89,10 @@ def cmd_start(args) -> int:
     from .tunnel import Tunnel
 
     cfg = config.load()
+    if not _port_free(cfg["port"]):
+        print("Jarvis is already running in another window (or something else is using port "
+              f"{cfg['port']}). Use that window, or close it first.")
+        return 1
     mac = MacController(max_width=cfg["screenshot_width"], voice=cfg["voice"])
     gate = Gatekeeper(get_mode=config.current_mode, is_paused=config.is_paused,
                       confirm=mac.confirm, log=config.log)
@@ -105,9 +120,18 @@ def cmd_start(args) -> int:
             print("=" * 72)
             print("Press Ctrl+C here to stop Jarvis.\n")
 
+        def failed(reason: str) -> None:
+            print("\n" + "!" * 72)
+            print("  The secure tunnel couldn't open, so Grok Bot can't reach this Mac yet.")
+            print(f"  Reason: {reason}")
+            print("  Check your internet connection, then press Ctrl+C and start Jarvis again.")
+            print(f"  Details: {config.HOME / 'tunnel.log'}")
+            print("!" * 72 + "\n")
+            config.log(f"Tunnel failed: {reason}")
+
         tunnel = Tunnel(cfg["tunnel"], cfg["port"], cfg["ngrok_domain"])
         print("Opening a secure tunnel so Grok can reach this Mac...")
-        tunnel.start(show)
+        tunnel.start(show, failed)
     else:
         print(f"Local only: http://127.0.0.1:{cfg['port']}/{cfg['key']}/mcp\n")
 

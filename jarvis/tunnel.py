@@ -31,15 +31,15 @@ class Tunnel:
         self.ngrok_domain = ngrok_domain
         self.proc: subprocess.Popen | None = None
 
-    def start(self, on_url: Callable[[str], None]) -> None:
+    def start(self, on_url: Callable[[str], None], on_fail: Callable[[str], None] = lambda _reason: None) -> None:
         if self.provider == "cloudflare":
-            self._start_cloudflare(on_url)
+            self._start_cloudflare(on_url, on_fail)
         elif self.provider == "ngrok":
             self._start_ngrok(on_url)
         else:
             raise ValueError(f"Unknown tunnel provider: {self.provider}")
 
-    def _start_cloudflare(self, on_url: Callable[[str], None]) -> None:
+    def _start_cloudflare(self, on_url: Callable[[str], None], on_fail: Callable[[str], None]) -> None:
         binary = find_binary("cloudflared")
         if not binary:
             raise RuntimeError("cloudflared is not installed. Run ./install.sh again.")
@@ -50,14 +50,20 @@ class Tunnel:
 
         def watch() -> None:
             found = False
+            last_error = ""
             log = (HOME / "tunnel.log").open("w")
             for line in self.proc.stdout:
                 log.write(line)
                 log.flush()
+                if " ERR " in line or "failed" in line.lower():
+                    last_error = line.strip()
                 match = _CLOUDFLARE_URL.search(line)
                 if match and not found:
                     found = True
                     on_url(match.group(0))
+            # cloudflared only stops on its own when something went wrong
+            if not found or self.proc.poll() not in (None, 0, -15):
+                on_fail(last_error or "the tunnel stopped unexpectedly")
 
         threading.Thread(target=watch, daemon=True).start()
 

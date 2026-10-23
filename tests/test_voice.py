@@ -85,3 +85,22 @@ def test_listener_wake_then_command(webhook, monkeypatch):
     assert listener.handle("random chatter", awaiting_command=False) is False
     assert listener.handle("hey jarvis open notes", awaiting_command=False) is False
     assert [body["text"] for _, body in received] == ["open my email", "open notes"]
+
+
+def test_wake_phrase_repeated_while_awaiting(webhook, monkeypatch):
+    url, received = webhook
+    monkeypatch.setattr(voice, "chime", lambda *a: None)
+    cfg = {"wake_phrases": ["hey jarvis"], "voice_webhook_url": url, "voice_webhook_headers": {}}
+    listener = Listener(cfg, log=lambda m: None, is_paused=lambda: False)
+    assert listener.handle("hey jarvis open safari", awaiting_command=True) is False
+    assert [body["text"] for _, body in received] == ["open safari"]
+
+
+def test_segmenter_with_numpy_frames():
+    import numpy as np
+
+    seg = Segmenter()
+    quiet = [np.full(480, 0.0005, dtype=np.float32)] * 30
+    loud = [np.full(480, 0.2, dtype=np.float32)] * 40
+    results = [seg.feed(f) for f in quiet + loud + quiet]
+    assert sum(r is not None for r in results) == 1

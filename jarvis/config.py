@@ -72,4 +72,5 @@ def is_paused() -> bool:
 def log(message: str) -> None:
     HOME.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a") as f:
-        f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {message}\n")
+        one_line = " ⏎ ".join(part.strip() for part in message.splitlines())
+        f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {one_line}\n")

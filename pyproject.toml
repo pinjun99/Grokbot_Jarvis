@@ -1,9 +1,9 @@
 [project]
 name = "jarvis"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lets Grok see and control your Mac, like Jarvis from Iron Man."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "mcp>=2.3,<3",
     "uvicorn>=0.30",

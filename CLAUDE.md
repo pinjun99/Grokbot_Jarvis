@@ -45,6 +45,15 @@ uv run pytest -q        # tests (fake Mac, real HTTP server); work on any OS
 uv run jarvis --help
 ```
 
+## Already verified without a Mac (Oct 2026)
+
+- Every pyobjc symbol used in `mac.py` exists in pyobjc 12.2.2 (checked against the macOS wheels).
+- faster-whisper 1.2.1 and sounddevice APIs match our calls; sounddevice's macOS wheel bundles PortAudio.
+- Python is pinned to 3.12 (`.python-version`, `install.sh`), because ctranslate2/onnxruntime have no 3.15 wheels.
+- `install.sh` ran end to end with a faked `uname`; shellcheck clean; cloudflared download URL works.
+- `jarvis start` ran end to end with a fake Mac: Bearer-header connect, 21 tools, screenshot + link,
+  deny pop-up on `rm -rf`, 404 without the key, clear message if the tunnel fails or Jarvis is already running.
+
 ## First run on the real Mac: TODO, never done yet
 
 `jarvis/mac.py` was written without access to a Mac. On the owner's Mac:

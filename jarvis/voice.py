@@ -9,6 +9,7 @@ loud through the Jarvis bridge.
 from __future__ import annotations
 
 import json
+import queue
 import re
 import subprocess
 import time
@@ -69,6 +70,8 @@ class Segmenter:
 
     @staticmethod
     def _rms(frame) -> float:
+        if hasattr(frame, "dtype"):  # numpy array from the microphone
+            return float((frame.astype("float64") ** 2).mean() ** 0.5) if len(frame) else 0.0
         n = len(frame) or 1
         return (sum(float(x) * float(x) for x in frame) / n) ** 0.5
 
@@ -125,23 +128,24 @@ class Listener:
             from faster_whisper import WhisperModel
 
             self._model = WhisperModel(self.cfg["speech_model"], device="cpu", compute_type="int8")
+        # vad_filter drops non-speech, so background noise isn't "heard" as words
         segments, _info = self._model.transcribe(
-            audio, language=self.cfg.get("speech_language") or None, beam_size=1,
-            initial_prompt=", ".join(self.phrases),
+            audio, language=self.cfg.get("speech_language") or None, beam_size=1, vad_filter=True,
         )
         return " ".join(s.text.strip() for s in segments).strip()
 
     def handle(self, text: str, awaiting_command: bool) -> bool:
         """Returns True if the next utterance should be treated as the command."""
-        if awaiting_command:
+        matched, rest = match_wake(text, self.phrases)
+        if matched:
+            command = rest
+        elif awaiting_command:
             command = text
         else:
-            matched, command = match_wake(text, self.phrases)
-            if not matched:
-                return False
-            if not command:
-                chime("Tink")
-                return True  # just the wake phrase: listen for the request next
+            return False
+        if not command:
+            chime("Tink")
+            return True  # just the wake phrase: listen for the request next
         if self.is_paused():
             subprocess.Popen(["say", "Jarvis is paused."])
             return False
@@ -166,11 +170,18 @@ class Listener:
         segmenter = Segmenter()
         awaiting_until = 0.0
         frame_len = int(SAMPLE_RATE * FRAME_SECONDS)
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", blocksize=frame_len) as stream:
+        # The microphone fills a queue in the background, so nothing you say is lost
+        # while the previous sentence is still being turned into text.
+        frames: queue.Queue = queue.Queue()
+
+        def on_audio(indata, _frames, _time, _status) -> None:
+            frames.put(indata[:, 0].copy())
+
+        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", blocksize=frame_len,
+                            callback=on_audio):
             on_ready()
             while True:
-                frame, _overflow = stream.read(frame_len)
-                utterance = segmenter.feed(frame[:, 0])
+                utterance = segmenter.feed(frames.get())
                 if utterance is None:
                     continue
                 text = self.transcribe(np.concatenate(utterance))
